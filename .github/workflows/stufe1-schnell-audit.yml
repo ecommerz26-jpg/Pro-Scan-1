@@ -36,7 +36,7 @@ jobs:
           format: 'table'
           output: './reports-stufe-1/2-trivy-sicherheit.txt'
 
-      - name: 4. Trivy & Syft – Komplette Lizenz-Übersicht erstellen
+      - name: 4. Trivy & Syft – Komplette Lizenz-Übersicht + GPL-Warnung
         run: |
           trivy fs --scanners license --license-full --format json --output trivy-lic.json ./target-repo
           python3 -c "
@@ -44,27 +44,43 @@ jobs:
           from collections import Counter
 
           lics = Counter()
+          warnungen = []
+          kritisch = ('GPL', 'AGPL', 'SSPL', 'EUPL', 'CPAL')
 
-          # 1. Alle Paket-Lizenzen aus Syft (Direkt & Indirekt) auslesen
+          # 1. Alle Paket-Lizenzen aus Syft (Direkt & Indirekt) prüfen
           sbom = json.load(open('./reports-stufe-1/1-abhaengigkeiten-sbom.json'))
           for comp in sbom.get('components', []):
+              pkg_name = f\"{comp.get('name')} ({comp.get('version', '')})\"
               for l in comp.get('licenses', []):
                   lic_id = l.get('license', {}).get('id') or l.get('license', {}).get('name') or l.get('expression')
                   if lic_id:
                       lics[lic_id] += 1
+                      if any(k in lic_id.upper() for k in kritisch) and 'LGPL' not in lic_id.upper():
+                          warnungen.append(f'[PAKET] {lic_id} -> {pkg_name}')
 
-          # 2. Alle Datei-Lizenzen aus Trivy auslesen
+          # 2. Alle Datei-Lizenzen aus Trivy prüfen
           tdata = json.load(open('trivy-lic.json'))
           for r in tdata.get('Results', []):
+              target = r.get('Target', 'Unbekannt')
               for l in r.get('Licenses', []):
                   name = l.get('Name')
+                  pfad = l.get('FilePath') or target
                   if name:
                       lics[name] += 1
+                      if any(k in name.upper() for k in kritisch) and 'LGPL' not in name.upper():
+                          warnungen.append(f'[DATEI] {name} -> {pfad}')
 
           with open('./reports-stufe-1/4-lizenz-uebersicht.txt', 'w') as f:
               f.write('KOMPLETTE LIZENZ-UEBERSICHT (PAKETE + DATEIEN):\n' + '='*48 + '\n')
               for name, count in lics.most_common():
                   f.write(f'{count}x  {name}\n')
+              f.write('\n' + '='*48 + '\n')
+              if warnungen:
+                  f.write('ACHTUNG - STRENGE LIZENZEN (COPYLEFT) GEFUNDEN:\n')
+                  for w in sorted(set(warnungen)):
+                      f.write(f'  * {w}\n')
+              else:
+                  f.write('GRUENES LICHT: Keine strengen Copyleft-Lizenzen (GPL/AGPL) gefunden!\n')
           "
 
       - name: 5. Ergebnisse bereitstellen
