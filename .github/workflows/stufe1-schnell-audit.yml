@@ -36,7 +36,7 @@ jobs:
           format: 'table'
           output: './reports-stufe-1/2-trivy-sicherheit.txt'
 
-      - name: 4. Trivy & Syft – Komplette Lizenz-Übersicht + GPL-Warnung
+      - name: 4. Trivy & Syft – Komplette Lizenz-Übersicht + Profi-Warnungen
         run: |
           trivy fs --scanners license --license-full --format json --output trivy-lic.json ./target-repo
           python3 -c "
@@ -44,8 +44,11 @@ jobs:
           from collections import Counter
 
           lics = Counter()
-          warnungen = []
-          kritisch = ('GPL', 'AGPL', 'SSPL', 'EUPL', 'CPAL')
+          rot_warnungen = []
+          gelb_hinweise = []
+
+          kritisch = ('GPL', 'AGPL', 'SSPL', 'EUPL', 'CPAL', '-NC')
+          vorsicht = ('LGPL', 'MPL')
 
           # 1. Alle Paket-Lizenzen aus Syft (Direkt & Indirekt) prüfen
           sbom = json.load(open('./reports-stufe-1/1-abhaengigkeiten-sbom.json'))
@@ -55,8 +58,11 @@ jobs:
                   lic_id = l.get('license', {}).get('id') or l.get('license', {}).get('name') or l.get('expression')
                   if lic_id:
                       lics[lic_id] += 1
-                      if any(k in lic_id.upper() for k in kritisch) and 'LGPL' not in lic_id.upper():
-                          warnungen.append(f'[PAKET] {lic_id} -> {pkg_name}')
+                      up = lic_id.upper()
+                      if any(v in up for v in vorsicht):
+                          gelb_hinweise.append(f'[PAKET] {lic_id} -> {pkg_name}')
+                      elif any(k in up for k in kritisch):
+                          rot_warnungen.append(f'[PAKET] {lic_id} -> {pkg_name}')
 
           # 2. Alle Datei-Lizenzen aus Trivy prüfen
           tdata = json.load(open('trivy-lic.json'))
@@ -67,20 +73,29 @@ jobs:
                   pfad = l.get('FilePath') or target
                   if name:
                       lics[name] += 1
-                      if any(k in name.upper() for k in kritisch) and 'LGPL' not in name.upper():
-                          warnungen.append(f'[DATEI] {name} -> {pfad}')
+                      up = name.upper()
+                      if any(v in up for v in vorsicht):
+                          gelb_hinweise.append(f'[DATEI] {name} -> {pfad}')
+                      elif any(k in up for k in kritisch):
+                          rot_warnungen.append(f'[DATEI] {name} -> {pfad}')
 
           with open('./reports-stufe-1/4-lizenz-uebersicht.txt', 'w') as f:
-              f.write('KOMPLETTE LIZENZ-UEBERSICHT (PAKETE + DATEIEN):\n' + '='*48 + '\n')
+              f.write('KOMPLETTE LIZENZ-UEBERSICHT (PAKETE + DATEIEN):\n' + '='*50 + '\n')
               for name, count in lics.most_common():
                   f.write(f'{count}x  {name}\n')
-              f.write('\n' + '='*48 + '\n')
-              if warnungen:
-                  f.write('ACHTUNG - STRENGE LIZENZEN (COPYLEFT) GEFUNDEN:\n')
-                  for w in sorted(set(warnungen)):
+
+              f.write('\n' + '='*50 + '\n')
+              if rot_warnungen:
+                  f.write('ROT (ACHTUNG - GPL / AGPL / NON-COMMERCIAL):\n')
+                  for w in sorted(set(rot_warnungen)):
                       f.write(f'  * {w}\n')
               else:
-                  f.write('GRUENES LICHT: Keine strengen Copyleft-Lizenzen (GPL/AGPL) gefunden!\n')
+                  f.write('GRUENES LICHT: Keine roten Lizenzen (GPL/AGPL/NC) gefunden!\n')
+
+              if gelb_hinweise:
+                  f.write('\nGELB (HINWEIS - LGPL / MPL SEPARAT EINBINDEN):\n')
+                  for g in sorted(set(gelb_hinweise)):
+                      f.write(f'  * {g}\n')
           "
 
       - name: 5. Ergebnisse bereitstellen
