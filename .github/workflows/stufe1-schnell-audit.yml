@@ -1,0 +1,45 @@
+name: Stufe 1 - Schnell-Audit (Syft + Trivy)
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'Vollständiger GitHub-Link (z. B. https://github.com)'
+        required: true
+        type: string
+
+jobs:
+  Stufe-1-Schnell-Audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 1. Ziel-Repo einlesen
+        run: |
+          CLEAN_URL=$(echo "${{ github.event.inputs.repo_url }}" | xargs)
+          git clone --depth 1 "$CLEAN_URL" target-repo
+          mkdir -p reports-stufe-1
+
+      - name: 2. Syft (Alle direkten & indirekten Abhängigkeiten)
+        uses: anchore/sbom-action@v0
+        with:
+          path: './target-repo'
+          format: 'cyclonedx-json'
+          output-file: './reports-stufe-1/1-abhaengigkeiten-sbom.json'
+
+      - name: 3. Trivy (Paket-Lizenzen, Sicherheitslücken & Secrets als HTML)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: './target-repo'
+          scanners: 'vuln,license,secret'
+          format: 'template'
+          template: '@/contrib/html.tpl'
+          output: './reports-stufe-1/2-trivy-auswertung.html'
+
+      - name: 4. Stufe-1-Bericht bereitstellen
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Ergebnis-Stufe-1-Schnell-Audit
+          path: ./reports-stufe-1/
