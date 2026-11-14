@@ -19,26 +19,24 @@ jobs:
           CLEAN_URL=$(echo "${{ github.event.inputs.repo_url }}" | xargs)
           git clone --depth 1 "$CLEAN_URL" target-repo
           mkdir -p reports-stufe-1
-          curl -sSL https://githubusercontent.com -o html.tpl
 
-      - name: 2. Syft (Alle direkten & indirekten Abhängigkeiten)
+      - name: 2. Syft (Direkte & indirekte Abhängigkeiten)
         uses: anchore/sbom-action@v0
         with:
           path: './target-repo'
           format: 'cyclonedx-json'
           output-file: './reports-stufe-1/1-abhaengigkeiten-sbom.json'
 
-      - name: 3. Trivy (Paket-Lizenzen, Sicherheitslücken & Secrets als HTML)
+      - name: 3. Trivy (Lizenzen, Sicherheitslücken & Secrets)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: './target-repo'
           scanners: 'vuln,license,secret'
-          format: 'template'
-          template: '@html.tpl'
-          output: './reports-stufe-1/2-trivy-auswertung.html'
+          format: 'table'
+          output: './reports-stufe-1/2-trivy-auswertung.txt'
 
-      - name: 4. Stufe-1-Bericht bereitstellen
+      - name: 4. Ergebnisse bereitstellen
         uses: actions/upload-artifact@v4
         if: always()
         with:
