@@ -1,0 +1,36 @@
+name: Stufe 2 - Tiefenscan (ScanCode)
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo_url:
+        description: 'Vollständiger GitHub-Link (z. B. https://github.com)'
+        required: true
+        type: string
+
+jobs:
+  Stufe-2-Tiefenscan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: 1. Ziel-Repo einlesen
+        run: |
+          CLEAN_URL=$(echo "${{ github.event.inputs.repo_url }}" | xargs)
+          git clone --depth 1 "$CLEAN_URL" target-repo
+          mkdir -p reports-stufe-2
+
+      - name: 2. ScanCode Toolkit (Datei-für-Datei Lizenz- & Copyright-Scan)
+        run: |
+          docker run --rm \
+            -v "$PWD/target-repo:/workdir" \
+            -v "$PWD/reports-stufe-2:/output" \
+            ghcr.io/aboutcode-org/scancode-toolkit:latest \
+            -clipeu --processes 2 --html /output/3-scancode-tiefenscan.html /workdir
+
+      - name: 3. Stufe-2-Bericht bereitstellen
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Ergebnis-Stufe-2-Tiefenscan
+          path: ./reports-stufe-2/
