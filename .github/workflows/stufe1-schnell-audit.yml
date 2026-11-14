@@ -19,6 +19,7 @@ jobs:
           CLEAN_URL=$(echo "${{ github.event.inputs.repo_url }}" | xargs)
           git clone --depth 1 "$CLEAN_URL" target-repo
           mkdir -p reports-stufe-1
+          curl -sSL https://githubusercontent.com -o html.tpl
 
       - name: 2. Syft (Alle direkten & indirekten Abhängigkeiten)
         uses: anchore/sbom-action@v0
@@ -34,7 +35,7 @@ jobs:
           scan-ref: './target-repo'
           scanners: 'vuln,license,secret'
           format: 'template'
-          template: '@/contrib/html.tpl'
+          template: '@html.tpl'
           output: './reports-stufe-1/2-trivy-auswertung.html'
 
       - name: 4. Stufe-1-Bericht bereitstellen
